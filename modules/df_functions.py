@@ -52,7 +52,7 @@ def get_repo_from_source(path: str):
         if os.path.isdir(save_path):
             repo = Repo(save_path)
         else:
-            repo = Repo.clone_from(path, save_path)
+            repo = Repo.clone_from(path, save_path, no_checkout=True)
     else:
         repo = Repo(path)
         repo_path = repo.git.rev_parse("--show-toplevel")
