@@ -1,6 +1,7 @@
 # Git Plots
 
 Package for plotting some basic information about a git repo as a function of time. There are many like it, but this one is mine.  
+
 Shows line additions / deletions, number of commits and total lines of code.  
 
 Currently only shows per day, but I will extend it so you can plot by week/month/year.
