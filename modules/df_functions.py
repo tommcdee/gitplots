@@ -1,5 +1,7 @@
+import os
 from git import Repo
 from git.objects.commit import Commit
+from git.exc import GitCommandError, NoSuchPathError, InvalidGitRepositoryError
 import pandas as pd
 from tempfile import TemporaryDirectory
 
@@ -14,36 +16,49 @@ def get_repo(
     """
     Get a human readable dataframe about a git repo.
     """
-    commits_full = get_from_source(path=path, branch=branch)
+    try:
+        repo, repo_name = get_repo_from_source(path)
+    except (InvalidGitRepositoryError, NoSuchPathError):
+        print("Path not recognized as a git repo.")
+        return
+
+    if branch:
+        if branch == "--all":
+            commits_full = list(repo.iter_commits("--all"))
+        else:
+            commits_full = list(repo.iter_commits(branch))
+    else:
+        commits_full = list(repo.iter_commits())
+
+    commits_full.reverse()
     commits_full = commits_full[start:end]
     df_commits = get_df(commits_full)
+
     if penalties:
         df_commits = penalize(df_commits, penalties=penalties)
     df = group_by_time(df_commits)
+
+    df.title = repo_name
     return df
 
 
-def get_from_source(path: str, branch: str = None) -> list[Commit]:
-    """
-    Given a path to a git repo (either local or remote), return a list of gitpython commit objects.
-    """
+def get_repo_from_source(path: str):
+    """Get repo from the source using gitpython."""
+    if not os.path.isdir("cloned_repos"):
+        os.mkdir("cloned_repos")
     if path.startswith("http"):
-        # If the path is a URL, clone the repository to a temporary directory
-        with TemporaryDirectory() as temp_dir:
-            repo = Repo.clone_from(path, temp_dir)
-            if branch:
-                commits_full = list(repo.iter_commits(branch))
-            else:
-                commits_full = list(repo.iter_commits("--all"))
-    else:
-        # If the path is local, open the repository
-        repo = Repo(path)
-        if branch:
-            commits_full = list(repo.iter_commits(branch))
+        repo_name = os.path.splitext(os.path.basename(path))[0]
+        save_path = os.path.join("cloned_repos", repo_name)
+        if os.path.isdir(save_path):
+            repo = Repo(save_path)
         else:
-            commits_full = list(repo.iter_commits("--all"))
+            repo = Repo.clone_from(path, save_path)
+    else:
+        repo = Repo(path)
+        repo_path = repo.git.rev_parse("--show-toplevel")
+        repo_name = os.path.basename(repo_path)
 
-    return commits_full
+    return repo, repo_name
 
 
 def get_df(commits_full: list[Commit]):
@@ -51,7 +66,7 @@ def get_df(commits_full: list[Commit]):
     Take a full list of commits from gitpython and convert to human readable dataframe.
     """
     commits = []
-    for commit in reversed(commits_full):
+    for commit in commits_full:
         commits.append(
             {
                 "id": commit.hexsha,

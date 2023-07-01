@@ -1,0 +1,1 @@
+If get_repo is supplied a repo from a remote repository, it will be cloned here.

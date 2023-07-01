@@ -1,9 +1,11 @@
 import matplotlib.pyplot as plt
 from matplotlib import font_manager as fm
 import pandas as pd
+import os
+from PIL import Image
 
 
-def plot(df):
+def plot(df, save: str = None, title: str = None):
     """Plots git repo information as a function of time."""
     insertion_color = "#88c999"  # green
     deletion_color = "#ff8c8c"  # red
@@ -12,8 +14,6 @@ def plot(df):
     label_color = "#5c5c5c"  # grey
 
     dates = [date.strftime("%d/%m") for date in df["date"]]
-    # extended_dates = dates.copy().append("")
-    # final_code_count = df_days["total_code"].iloc[-1]
 
     fig, ax1 = plt.subplots(figsize=(12, 6))
 
@@ -60,7 +60,8 @@ def plot(df):
     ax3.set_yticklabels([])
 
     # Set axis labels and title
-    ax1.set_title("cityalarms.com reboot", fontsize=13, color=label_color)
+
+    ax1.set_title(title or df.title or "git history", fontsize=13, color=label_color)
     ax1.set_xlabel("date", fontsize=13, color=label_color)
     ax1.set_ylabel("code edits", fontsize=13, color=label_color)
     ax2.set_ylabel("commits", fontsize=13, color=label_color)
@@ -122,14 +123,23 @@ def plot(df):
     ax.set_xlim(-margin, len(dates) - 1 + margin)
 
     # Annotations
-    font_properties = fm.FontProperties(size=11)
-    ax1.annotate(
-        "6134 total lines",
-        xy=(0, 0),
-        xytext=(len(dates) - 4.7, 1900),
-        fontproperties=font_properties,
-        color=label_color,
-    )
+    # font_properties = fm.FontProperties(size=11)
+    # ax1.annotate(
+    #     "6134 total lines",
+    #     xy=(0, 0),
+    #     xytext=(len(dates) - 4.7, 1900),
+    #     fontproperties=font_properties,
+    #     color=label_color,
+    # )
 
     plt.tight_layout()
+    if save:
+        file_name, extension = os.path.splitext(save)
+        if extension.lower() == ".webp":
+            save = file_name + ".png"
+            plt.savefig(save, dpi=300)
+            image = Image.open(save)
+            image.save(file_name + ".webp", "WEBP")
+        else:
+            plt.savefig(save, dpi=300)
     plt.show()
