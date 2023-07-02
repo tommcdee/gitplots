@@ -64,21 +64,26 @@ def get_repo_from_source(path: str):
 
 def get_df(commits_full: list[Commit]):
     """Take a full list of commits from gitpython and convert to human readable dataframe."""
-    commit_generator = (
-        {
-            "id": commit.hexsha,
-            "date": commit.authored_datetime.date(),
-            "message": commit.message.replace("\n", ""),
-            "insertions": commit.stats.total["insertions"],
-            "deletions": commit.stats.total["deletions"],
-            "total_edits": commit.stats.total["lines"],
-        }
-        for commit in commits_full
+    df_commits = pd.DataFrame(commits_full).rename(columns={0: "id"})
+    df_commits["date"] = df_commits["id"].apply(
+        lambda commit: commit.authored_datetime.date()
     )
-    df_commits = pd.DataFrame(commit_generator)
+    df_commits["message"] = df_commits["id"].apply(
+        lambda commit: commit.message.replace("\n", "")
+    )
+    df_commits["stats"] = df_commits["id"].apply(lambda commit: commit.stats.total)
+    df_commits["insertions"] = df_commits["stats"].apply(
+        lambda stats: stats["insertions"]
+    )
+    df_commits["deletions"] = df_commits["stats"].apply(
+        lambda stats: stats["deletions"]
+    )
+    df_commits["total_edits"] = df_commits["insertions"] + df_commits["deletions"]
+    df_commits.drop("stats", axis=1, inplace=True)
+
     net_code_added = df_commits["insertions"] - df_commits["deletions"]
     df_commits["total_code"] = net_code_added.cumsum()
-    return df_commits
+    return df_commits.sort_values(by="date")
 
 
 def penalize(
