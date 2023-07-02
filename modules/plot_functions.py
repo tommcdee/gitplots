@@ -59,7 +59,7 @@ def plot(df, save: str = None, title: str = None):
     ax3.plot(
         dates,
         df["total_code"],
-        label="total lines of code",
+        label=f"total lines added = {df['total_code'].iloc[-1]}",
         color=total_color,
         alpha=0.6,
     )
@@ -68,7 +68,6 @@ def plot(df, save: str = None, title: str = None):
     ax3.set_yticklabels([])
 
     # Set axis labels and title
-
     ax1.set_title(title or df.title or "git history", fontsize=13, color=label_color)
     ax1.set_xlabel("date", fontsize=13, color=label_color)
     ax1.set_ylabel("code edits", fontsize=13, color=label_color)
@@ -79,7 +78,7 @@ def plot(df, save: str = None, title: str = None):
     ax2.tick_params(axis="x", rotation=45, colors=label_color)
 
     # Make y=0 aligned with bottom of plot
-    ax1.set_ylim(bottom=0, top=1.2 * df["total_edits"].max())
+    ax1.set_ylim(bottom=0, top=1.2 * (df["insertions"] + df["deletions"]).max())
     ax2.set_ylim(bottom=0, top=1.2 * df["commits"].max())
     ax3.set_ylim(bottom=0, top=1.2 * df["total_code"].max())
 
@@ -129,16 +128,6 @@ def plot(df, save: str = None, title: str = None):
     # Reduce the x-axis margins
     margin = 1  # Adjust the margin size as needed
     ax.set_xlim(-margin, len(dates) - 1 + margin)
-
-    # Annotations
-    # font_properties = fm.FontProperties(size=11)
-    # ax1.annotate(
-    #     "6134 total lines",
-    #     xy=(0, 0),
-    #     xytext=(len(dates) - 4.7, 1900),
-    #     fontproperties=font_properties,
-    #     color=label_color,
-    # )
 
     plt.tight_layout()
     if save:

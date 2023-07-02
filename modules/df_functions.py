@@ -13,6 +13,7 @@ def get_repo(
     end: int = None,
     penalties: list[tuple[str, float]] | tuple[str, float] = None,
     group: Literal["day", "month", "year"] = "day",
+    full_info: bool = False,
 ) -> pd.DataFrame:
     """
     Get a human readable dataframe about a git repo.
@@ -23,6 +24,7 @@ def get_repo(
         print("Path not recognized as a git repo.")
         return
 
+    # get only commits of certain branch
     if branch:
         if branch == "--all":
             commits_full = list(repo.iter_commits("--all"))
@@ -31,16 +33,22 @@ def get_repo(
     else:
         commits_full = list(repo.iter_commits())
 
+    # full dataframe with all commits
     commits_full.reverse()
-    commits_full = commits_full[start:end]
-    df_commits = get_df(commits_full)
+    df_commits = get_df(commits_full[start:end])
+    df_commits["net_change"] = df_commits["insertions"] - df_commits["deletions"]
+    df_commits["total_code"] = (df_commits["net_change"]).cumsum()
 
+    # reduced dataframe with penalties and grouping by date
     if penalties:
         df_commits = penalize(df_commits, penalties=penalties)
     df = group_by_time(df_commits, group=group)
-
     df.title = repo_name
-    return df
+
+    if full_info:
+        return df, df_commits
+    else:
+        return df
 
 
 def get_repo_from_source(path: str):
@@ -78,11 +86,9 @@ def get_df(commits_full: list[Commit]):
     df_commits["deletions"] = df_commits["stats"].apply(
         lambda stats: stats["deletions"]
     )
-    df_commits["total_edits"] = df_commits["insertions"] + df_commits["deletions"]
+    df_commits["net_change"] = df_commits["insertions"] - df_commits["deletions"]
     df_commits.drop("stats", axis=1, inplace=True)
 
-    net_code_added = df_commits["insertions"] - df_commits["deletions"]
-    df_commits["total_code"] = net_code_added.cumsum()
     return df_commits
 
 
@@ -100,7 +106,7 @@ def penalize(
     for penalty in penalties:
         penalty_string, multiplication_factor = penalty
         mask = df_commits["message"].str.contains(penalty_string, case=False)
-        for key in ["insertions", "deletions", "total_edits"]:
+        for key in ["insertions", "deletions"]:
             df_commits.loc[mask, key] = (
                 df_commits.loc[mask, key] * multiplication_factor
             )
@@ -124,8 +130,6 @@ def group_by_time(
             {
                 "insertions": "sum",
                 "deletions": "sum",
-                "total_edits": "sum",
-                "total_code": "max",
                 "date": "size",
             }
         )
@@ -133,4 +137,6 @@ def group_by_time(
         .sort_values(by="date")
         .reset_index()
     )
+    df["net_change"] = df["insertions"] - df["deletions"]
+    df["total_code"] = (df["net_change"]).cumsum()
     return df
