@@ -13,7 +13,12 @@ def plot(df, save: str = None, title: str = None):
     total_color = "#5c5c5c"  # grey
     label_color = "#5c5c5c"  # grey
 
-    dates = [date.strftime("%d/%m") for date in df["date"]]
+    if "date" in df:
+        dates = [date.strftime("%d/%m") for date in df["date"]]
+    elif "month/year" in df:
+        dates = df["month/year"]
+    elif "year" in df:
+        dates = df["year"]
 
     fig, ax1 = plt.subplots(figsize=(12, 6))
 

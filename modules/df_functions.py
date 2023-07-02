@@ -3,7 +3,7 @@ from git import Repo
 from git.objects.commit import Commit
 from git.exc import GitCommandError, NoSuchPathError, InvalidGitRepositoryError
 import pandas as pd
-from tempfile import TemporaryDirectory
+from typing import Literal
 
 
 def get_repo(
@@ -12,13 +12,14 @@ def get_repo(
     start: int = None,
     end: int = None,
     penalties: list[tuple[str, float]] | tuple[str, float] = None,
+    group: Literal["day", "month", "year"] = "day",
 ) -> pd.DataFrame:
     """
     Get a human readable dataframe about a git repo.
     """
     try:
         repo, repo_name = get_repo_from_source(path)
-    except (InvalidGitRepositoryError, NoSuchPathError):
+    except (InvalidGitRepositoryError, NoSuchPathError, GitCommandError):
         print("Path not recognized as a git repo.")
         return
 
@@ -36,7 +37,7 @@ def get_repo(
 
     if penalties:
         df_commits = penalize(df_commits, penalties=penalties)
-    df = group_by_time(df_commits)
+    df = group_by_time(df_commits, group=group)
 
     df.title = repo_name
     return df
@@ -62,22 +63,19 @@ def get_repo_from_source(path: str):
 
 
 def get_df(commits_full: list[Commit]):
-    """
-    Take a full list of commits from gitpython and convert to human readable dataframe.
-    """
-    commits = []
-    for commit in commits_full:
-        commits.append(
-            {
-                "id": commit.hexsha,
-                "date": commit.authored_datetime.date(),
-                "message": commit.message.replace("\n", ""),
-                "insertions": commit.stats.total["insertions"],
-                "deletions": commit.stats.total["deletions"],
-                "total_edits": commit.stats.total["lines"],
-            }
-        )
-    df_commits = pd.DataFrame(commits)
+    """Take a full list of commits from gitpython and convert to human readable dataframe."""
+    commit_generator = (
+        {
+            "id": commit.hexsha,
+            "date": commit.authored_datetime.date(),
+            "message": commit.message.replace("\n", ""),
+            "insertions": commit.stats.total["insertions"],
+            "deletions": commit.stats.total["deletions"],
+            "total_edits": commit.stats.total["lines"],
+        }
+        for commit in commits_full
+    )
+    df_commits = pd.DataFrame(commit_generator)
     net_code_added = df_commits["insertions"] - df_commits["deletions"]
     df_commits["total_code"] = net_code_added.cumsum()
     return df_commits
@@ -97,20 +95,30 @@ def penalize(
     for penalty in penalties:
         penalty_string, multiplication_factor = penalty
         mask = df_commits["message"].str.contains(penalty_string, case=False)
-        df_commits.loc[mask, "insertions"] = (
-            df_commits.loc[mask, "insertions"] * multiplication_factor
-        )
-        df_commits.loc[mask, "deletions"] = (
-            df_commits.loc[mask, "deletions"] * multiplication_factor
-        )
-        df_commits.loc[mask, "total_edits"] = (
-            df_commits.loc[mask, "total_edits"] * multiplication_factor
-        )
+        for key in ["insertions", "deletions", "total_edits"]:
+            df_commits.loc[mask, key] = (
+                df_commits.loc[mask, key] * multiplication_factor
+            )
     return df_commits
 
 
-def group_by_time(df_commits: pd.DataFrame) -> pd.DataFrame:
+def group_by_time(
+    df_commits: pd.DataFrame, group: Literal["day", "month", "year"] = "day"
+) -> pd.DataFrame:
     """At the moment only supports grouping by day but can be extended."""
+
+    if group.lower() == "month":
+        df_commits["date"] = df_commits["date"].apply(lambda x: x.strftime("%m/%Y"))
+        new_key = "month/year"
+    elif group.lower() == "year":
+        df_commits["date"] = df_commits["date"].apply(lambda x: x.strftime("%Y"))
+        new_key = "year"
+    elif group.lower() == "day":
+        new_key = "date"
+    else:
+        print("group should be 'day', 'month' or 'year'")
+        return
+
     df = (
         df_commits.groupby("date")
         .agg(
@@ -119,11 +127,10 @@ def group_by_time(df_commits: pd.DataFrame) -> pd.DataFrame:
                 "deletions": "sum",
                 "total_edits": "sum",
                 "total_code": "max",
-                "date": "size",  # New line: count the number of occurrences of each date
+                "date": "size",
             }
         )
-        # Rename the "date" column to "commits"
         .rename(columns={"date": "commits"})
         .reset_index()
     )
-    return df
+    return df.rename(columns={"date": new_key})
