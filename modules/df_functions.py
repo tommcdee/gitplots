@@ -4,15 +4,18 @@ from git.objects.commit import Commit
 from git.exc import GitCommandError, NoSuchPathError, InvalidGitRepositoryError
 import pandas as pd
 from typing import Literal
+from dateutil import parser
+import datetime
 
 
 def get_repo(
     path: str,
     branch: str = None,
-    start: int = None,
-    end: int = None,
+    start: int | str | datetime.date = None,
+    end: int | str | datetime.date = None,
     penalties: list[tuple[str, float]] | tuple[str, float] = None,
     group: Literal["day", "month", "year"] = "day",
+    all_dates: bool = False,
     full_info: bool = False,
 ) -> pd.DataFrame:
     """
@@ -35,14 +38,26 @@ def get_repo(
 
     # full dataframe with all commits
     commits_full.reverse()
-    df_commits = get_df(commits_full[start:end])
+    df_commits = get_df(commits_full)
     df_commits["net_change"] = df_commits["insertions"] - df_commits["deletions"]
     df_commits["total_code"] = (df_commits["net_change"]).cumsum()
 
     # reduced dataframe with penalties and grouping by date
+    df = df_commits.copy()
+    if isinstance(start, int):
+        df = df[start:].reset_index(drop=True)
+        start = None
+    elif isinstance(start, str):
+        start = parser.parse(start).date()
+    if isinstance(end, int):
+        df = df[:end].reset_index(drop=True)
+        end = None
+    elif isinstance(end, str):
+        end = parser.parse(end).date()
+
     if penalties:
-        df_commits = penalize(df_commits, penalties=penalties)
-    df = group_by_time(df_commits, group=group)
+        df = penalize(df, penalties=penalties)
+    df = group_by_time(df, group=group.lower(), start=start, end=end)
     df.title = repo_name
 
     if full_info:
@@ -93,7 +108,7 @@ def get_df(commits_full: list[Commit]):
 
 
 def penalize(
-    df_commits: pd.DataFrame, penalties: list[tuple[str, float]] | tuple[str, float]
+    df_input: pd.DataFrame, penalties: list[tuple[str, float]] | tuple[str, float]
 ) -> pd.DataFrame:
     """
     Give a penalty to commits with certain messages in them.
@@ -101,27 +116,29 @@ def penalize(
     penalty
       list of tuples, each tuple is (penalty_string, multiplication_factor)
     """
+    df = df_input.copy()
     if isinstance(penalties, tuple):
         penalties = [penalties]
     for penalty in penalties:
         penalty_string, multiplication_factor = penalty
-        mask = df_commits["message"].str.contains(penalty_string, case=False)
+        mask = df["message"].str.contains(penalty_string, case=False)
         for key in ["insertions", "deletions"]:
-            df_commits.loc[mask, key] = (
-                df_commits.loc[mask, key] * multiplication_factor
-            )
-    return df_commits
+            df.loc[mask, key] = df.loc[mask, key] * multiplication_factor
+    return df
 
 
 def group_by_time(
-    df_commits: pd.DataFrame, group: Literal["day", "month", "year"] = "day"
+    df_commits: pd.DataFrame,
+    group: Literal["day", "month", "year"] = "day",
+    start: datetime.date = None,
+    end: datetime.date = None,
 ) -> pd.DataFrame:
     """At the moment only supports grouping by day but can be extended."""
-    if group.lower() == "year":
+    if group == "year":
         df_commits["date"] = pd.to_datetime(df_commits["date"]).dt.to_period("Y")
-    elif group.lower() == "month":
+    elif group == "month":
         df_commits["date"] = pd.to_datetime(df_commits["date"]).dt.to_period("M")
-    elif group.lower() != "day":
+    elif group != "day":
         print("group should be 'day', 'month' or 'year'")
         return
     df = (
@@ -139,4 +156,9 @@ def group_by_time(
     )
     df["net_change"] = df["insertions"] - df["deletions"]
     df["total_code"] = (df["net_change"]).cumsum()
+    if start:
+        df = df[df.date > start].reset_index(drop=True)
+    if end:
+        df = df[df.date < end].reset_index(drop=True)
+
     return df
