@@ -13,12 +13,15 @@ def plot(df, save: str = None, title: str = None):
     total_color = "#5c5c5c"  # grey
     label_color = "#5c5c5c"  # grey
 
-    if "date" in df:
+    if df["date"].dtype == "O":
+        # days
         dates = [date.strftime("%d/%m") for date in df["date"]]
-    elif "month/year" in df:
-        dates = df["month/year"]
-    elif "year" in df:
-        dates = df["year"]
+    elif df["date"].dtype == "period[M]":
+        # months
+        dates = [date.strftime("%m/%Y") for date in df["date"]]
+    elif df["date"].dtype == "period[A-DEC]":
+        # years
+        dates = [date.strftime("%Y") for date in df["date"]]
 
     fig, ax1 = plt.subplots(figsize=(12, 6))
 

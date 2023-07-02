@@ -83,7 +83,7 @@ def get_df(commits_full: list[Commit]):
 
     net_code_added = df_commits["insertions"] - df_commits["deletions"]
     df_commits["total_code"] = net_code_added.cumsum()
-    return df_commits.sort_values(by="date")
+    return df_commits
 
 
 def penalize(
@@ -111,19 +111,13 @@ def group_by_time(
     df_commits: pd.DataFrame, group: Literal["day", "month", "year"] = "day"
 ) -> pd.DataFrame:
     """At the moment only supports grouping by day but can be extended."""
-
-    if group.lower() == "month":
-        df_commits["date"] = df_commits["date"].apply(lambda x: x.strftime("%m/%Y"))
-        new_key = "month/year"
-    elif group.lower() == "year":
-        df_commits["date"] = df_commits["date"].apply(lambda x: x.strftime("%Y"))
-        new_key = "year"
-    elif group.lower() == "day":
-        new_key = "date"
-    else:
+    if group.lower() == "year":
+        df_commits["date"] = pd.to_datetime(df_commits["date"]).dt.to_period("Y")
+    elif group.lower() == "month":
+        df_commits["date"] = pd.to_datetime(df_commits["date"]).dt.to_period("M")
+    elif group.lower() != "day":
         print("group should be 'day', 'month' or 'year'")
         return
-
     df = (
         df_commits.groupby("date")
         .agg(
@@ -136,6 +130,7 @@ def group_by_time(
             }
         )
         .rename(columns={"date": "commits"})
+        .sort_values(by="date")
         .reset_index()
     )
-    return df.rename(columns={"date": new_key})
+    return df
