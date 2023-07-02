@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 from matplotlib import font_manager as fm
+import numpy as np
 import pandas as pd
 import os
 from PIL import Image
@@ -7,75 +8,91 @@ from PIL import Image
 
 def plot(df, save: str = None, title: str = None):
     """Plots git repo information as a function of time."""
-    insertion_color = "#88c999"  # green
-    deletion_color = "#ff8c8c"  # red
-    commit_color = "#ffaf5f"  # orange
-    total_color = "#5c5c5c"  # grey
-    label_color = "#5c5c5c"  # grey
+    colors = {
+        "insertions": "#88c999",  # green
+        "deletions": "#ff8c8c",  # red
+        "commits": "#ffaf5f",  # orange
+        "total_code": "#5c5c5c",  # grey
+        "labels": "#5c5c5c",  # grey
+    }
 
-    if df["date"].dtype == "O":
-        # days
-        dates = [date.strftime("%d/%m") for date in df["date"]]
-    elif df["date"].dtype == "period[M]":
-        # months
-        dates = [date.strftime("%m/%Y") for date in df["date"]]
-    elif df["date"].dtype == "period[A-DEC]":
-        # years
-        dates = [date.strftime("%Y") for date in df["date"]]
+    date_format = {
+        "object": "%d/%m",  # days
+        "period[M]": "%m/%Y",  # months
+        "period[A-DEC]": "%Y",  # years
+    }
 
-    fig, ax1 = plt.subplots(figsize=(12, 6))
+    date_formatter = date_format.get(df["date"].dtype.name)
+    dates = [date.strftime(date_formatter) for date in df["date"]]
+
+    # add extra dummy data points before and after
+    num_dates = len(dates)
+    dates = ["before"] + dates + ["after"]
+    dummy_spacing = 0.666
+    x_positions = (
+        [0 - dummy_spacing] + list(range(num_dates)) + [num_dates - 1 + dummy_spacing]
+    )
 
     # Bar plot for insertions and deletions
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+    df_extended_I = [0] + df["insertions"].tolist() + [0]
     ax1.bar(
-        dates,
-        df["insertions"],
+        x_positions,
+        df_extended_I,
         label="additions",
-        width=0.7,
-        color=insertion_color,
+        width=0.666,
+        color=colors["insertions"],
     )
+    df_extended_D = [0] + df["deletions"].tolist() + [0]
     ax1.bar(
-        dates,
-        df["deletions"],
+        x_positions,
+        df_extended_D,
         label="deletions",
-        width=0.7,
-        color=deletion_color,
-        bottom=df["insertions"],
+        width=0.666,
+        color=colors["deletions"],
+        bottom=df_extended_I,
     )
 
     # Create a secondary y-axis for the number of commits
     ax2 = ax1.twinx()
+    df_extended = [np.nan] + df["commits"].tolist() + [np.nan]
     ax2.plot(
-        dates,
-        df["commits"],
-        color=commit_color,
+        x_positions,
+        df_extended,
+        color=colors["commits"],
         marker="o",
         markersize=8,
         linewidth=3,
         label="commits",
     )
 
-    # plot total amount of code
+    # Plot total amount of code
     ax3 = ax1.twinx()
+    df_extended = [0] + df["total_code"].tolist() + [df["total_code"].iloc[-1]]
     ax3.plot(
-        dates,
-        df["total_code"],
+        x_positions,
+        df_extended,
         label=f"total lines added = {df['total_code'].iloc[-1]}",
-        color=total_color,
+        color=colors["total_code"],
         alpha=0.6,
     )
-    ax3.fill_between(dates, df["total_code"], color=total_color, alpha=0.1)
+    ax3.fill_between(x_positions, df_extended, color=colors["total_code"], alpha=0.1)
     ax3.set_yticks([])
     ax3.set_yticklabels([])
 
     # Set axis labels and title
-    ax1.set_title(title or df.title or "git history", fontsize=13, color=label_color)
-    ax1.set_xlabel("date", fontsize=13, color=label_color)
-    ax1.set_ylabel("code edits", fontsize=13, color=label_color)
-    ax2.set_ylabel("commits", fontsize=13, color=label_color)
+    ax1.set_title(
+        title or df.title or "git history", fontsize=13, color=colors["labels"]
+    )
+    ax1.set_xlabel("date", fontsize=13, color=colors["labels"])
+    ax1.set_ylabel("code edits", fontsize=13, color=colors["labels"])
+    ax2.set_ylabel("commits", fontsize=13, color=colors["labels"])
 
     # Rotate and align x-axis tick labels for both subplots
-    ax1.tick_params(axis="x", rotation=45, colors=label_color)
-    ax2.tick_params(axis="x", rotation=45, colors=label_color)
+    ax1.tick_params(axis="x", rotation=45, colors=colors["labels"])
+    ax2.tick_params(axis="x", rotation=45, colors=colors["labels"])
+    ax1.set_xticks(x_positions, dates)
+    ax1.set_xticks(ax1.get_xticks()[1:-1])
 
     # Make y=0 aligned with bottom of plot
     ax1.set_ylim(bottom=0, top=1.2 * (df["insertions"] + df["deletions"]).max())
@@ -104,9 +121,9 @@ def plot(df, save: str = None, title: str = None):
 
     # Color the font in the legends
     for text in legend_ax1.get_texts():
-        text.set_color(label_color)
+        text.set_color(colors["labels"])
     for text in legend_combined.get_texts():
-        text.set_color(label_color)
+        text.set_color(colors["labels"])
 
     # Background color
     ax1.set_facecolor("pink")
@@ -120,14 +137,14 @@ def plot(df, save: str = None, title: str = None):
 
     # Frame colours
     for ax in [ax1, ax2, ax3]:
-        ax.tick_params(color=label_color, labelcolor=label_color)
+        ax.tick_params(color=colors["labels"], labelcolor=colors["labels"])
         for spine in ax.spines.values():
-            spine.set_edgecolor(label_color)
+            spine.set_edgecolor(colors["labels"])
             spine.set_visible(False)
 
     # Reduce the x-axis margins
-    margin = 1  # Adjust the margin size as needed
-    ax.set_xlim(-margin, len(dates) - 1 + margin)
+    margin = 0.3  # Adjust the margin size as needed
+    ax.set_xlim(x_positions[0] - margin, x_positions[-1] + margin)
 
     plt.tight_layout()
     if save:
