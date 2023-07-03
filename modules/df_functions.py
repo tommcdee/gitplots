@@ -58,6 +58,9 @@ def get_repo(
     if penalties:
         df = penalize(df, penalties=penalties)
     df = group_by_time(df, group=group.lower(), start=start, end=end)
+
+    if all_dates:
+        df = fill_missing_dates(df)
     df.title = repo_name
 
     if full_info:
@@ -161,4 +164,23 @@ def group_by_time(
     if end:
         df = df[df.date < end].reset_index(drop=True)
 
+    return df
+
+
+def fill_missing_dates(df_input):
+    df = df_input.copy()
+    df.set_index("date", inplace=True)
+    date_type = df.index.dtype.name
+    if date_type == "object":  # days
+        df.index = pd.to_datetime(df.index)
+        df = df.asfreq("D")
+    elif date_type == "period[M]":  # months
+        df.index = pd.PeriodIndex(df.index, freq="M").to_timestamp()
+        df = df.asfreq("MS")
+    elif date_type == "period[A-DEC]":  # years
+        df.index = pd.PeriodIndex(df.index, freq="Y").to_timestamp()
+        df = df.asfreq("YS")
+    df = df.apply(lambda x: x.ffill() if x.name == "total_code" else x.fillna(0))
+    df = df.reset_index().rename(columns={"index": "date"})
+    df["date"] = df["date"].dt.date
     return df
