@@ -11,6 +11,7 @@ import datetime
 def get_repo(
     path: str,
     branch: str = None,
+    author: str = "",
     start: int | str | datetime.date = None,
     end: int | str | datetime.date = None,
     penalties: list[tuple[str, float]] | tuple[str, float] = None,
@@ -38,7 +39,7 @@ def get_repo(
 
     # full dataframe with all commits
     commits_full.reverse()
-    df_commits = get_df(commits_full)
+    df_commits = get_df(commits_full, author=author.lower())
     df_commits["net_change"] = df_commits["insertions"] - df_commits["deletions"]
     df_commits["total_code"] = (df_commits["net_change"]).cumsum()
 
@@ -88,9 +89,15 @@ def get_repo_from_source(path: str):
     return repo, repo_name
 
 
-def get_df(commits_full: list[Commit]):
+def get_df(commits_full: list[Commit], author: str = ""):
     """Take a full list of commits from gitpython and convert to human readable dataframe."""
-    df_commits = pd.DataFrame(commits_full).rename(columns={0: "id"})
+    df_commits = pd.DataFrame(
+        [commit for commit in commits_full if author in commit.author.name.lower()]
+    )
+    if len(df_commits) == 0:
+        print(f"No author called {author}")
+        return
+    df_commits = df_commits.rename(columns={0: "id"})
     df_commits["date"] = df_commits["id"].apply(
         lambda commit: commit.authored_datetime.date()
     )
